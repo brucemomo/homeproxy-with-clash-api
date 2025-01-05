@@ -1,0 +1,55 @@
+name: Build HomeProxy for OpenWRT
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Build Environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libssl-dev libncurses5-dev unzip gawk git wget python3
+
+    - name: Clone OpenWRT Source
+      run: |
+        git clone -b openwrt-24.10 https://github.com/openwrt/openwrt.git
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Add HomeProxy Package
+      run: |
+        mkdir -p openwrt/package/homeproxy-with-clash-api
+        cp -r ./homeproxy-with-clash-api/* openwrt/package/homeproxy-with-clash-api/
+
+    - name: Configure Build
+      run: |
+        cd openwrt
+        make menuconfig <<EOF
+        Target System (ARM)
+        Subtarget (Cortex-A53)
+        Target Profile (Default)
+        Network -> homeproxy-with-clash-api [*]
+        EOF
+
+    - name: Compile
+      run: |
+        cd openwrt
+        make -j$(nproc)
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: homeproxy-ipk
+        path: openwrt/bin/packages/arm_cortex-a53/*.ipk
